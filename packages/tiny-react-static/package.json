@@ -1,0 +1,38 @@
+{
+	"name": "tiny-react-static",
+	"version": "1.0.0",
+	"description": "A tiny React static site generator built for simplicity and speed. For small sites and landing pages.",
+	"keywords": [
+		"react",
+		"static",
+		"small",
+		"simple",
+		"landing",
+		"html",
+		"site"
+	],
+	"author": "Marek Piechut <marek@dayone.pl>",
+	"homepage": "",
+	"license": "MIT",
+	"main": "lib/index.js",
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"peerDependencies": {
+		"react": ">=17.0.0",
+		"react-dom": ">=17.0.0"
+	},
+	"directories": {
+		"lib": "lib",
+		"test": "__tests__"
+	},
+	"files": [
+		"lib"
+	],
+	"scripts": {
+		"test": "node ./__tests__/tiny-react-static.test.js"
+	},
+	"dependencies": {
+		"esbuild": "^0.17.5"
+	}
+}
