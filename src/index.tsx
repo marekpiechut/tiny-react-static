@@ -4,15 +4,16 @@ import path from 'path'
 import ReactDOM from 'react-dom/server'
 import { helmetPlugin } from './plugins/helmet'
 import { reactRouterPlugin } from './plugins/react-router'
+import { logger } from './logger'
+
+const log = logger('root')
 
 const plugins = [helmetPlugin(), reactRouterPlugin()]
 
 const run = async (): Promise<void> => {
 	const root = __dirname
 	const temp = await fs.promises.mkdtemp(path.join(root, '.static'))
-	const output = path.join(root, 'dist')
-
-	await fs.promises.mkdir(output).catch(e => console.log(e))
+	const output = createOutputPath(root)
 
 	const serverOut = path.join(temp, 'server-content.js')
 	try {
@@ -76,14 +77,25 @@ const loadHtmlTemplate = async (): Promise<string> => {
 	return fs.promises.readFile('./template.html', 'utf-8')
 }
 
-const extractBundle = (
-	metafile: Metafile,
-	outdir: string
-): string | undefined => {
+const createOutputPath = (root: string): string => {
+	const folder = path.join(root, 'dist')
+	if (!fs.existsSync(folder)) {
+		log.info(`Creating output folder: ${folder}`)
+		fs.mkdirSync(folder)
+	} else {
+		log.info(`Clearing output folder: ${folder}`)
+		fs.rmSync(folder, { recursive: true })
+	}
+
+	return folder
+}
+
+const extractBundle = (metafile: Metafile, outdir: string): string | null => {
 	const bundleFile = Object.keys(metafile.outputs).find(f => f.endsWith('.js'))
 	if (bundleFile) {
 		return path.resolve(bundleFile).substring(path.resolve(outdir).length)
 	}
+	return null
 }
 
 run()
