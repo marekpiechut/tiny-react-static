@@ -1,25 +1,20 @@
 import esbuild, { Metafile } from 'esbuild'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import ReactDOM from 'react-dom/server'
-import { StaticRouter } from 'react-router-dom/server'
-import { Helmet, HelmetProvider } from 'react-helmet-async'
-import type { HelmetServerState } from 'react-helmet-async'
-import type { ReactElement } from 'react'
+import { helmetPlugin } from './plugins/helmet'
+import { reactRouterPlugin } from './plugins/react-router'
 
-type HelmetContext = {
-	helmet?: HelmetServerState
-}
+const plugins = [helmetPlugin(), reactRouterPlugin()]
 
-const run = async () => {
+const run = async (): Promise<void> => {
 	const root = __dirname
 	const temp = await fs.promises.mkdtemp(path.join(root, '.static'))
 	const output = path.join(root, 'dist')
 
 	await fs.promises.mkdir(output).catch(e => console.log(e))
 
-	const serverjs = path.join(temp, 'server-content.js')
+	const serverOut = path.join(temp, 'server-content.js')
 	try {
 		await esbuild.build({
 			entryPoints: ['../test-project/index.tsx'],
@@ -27,7 +22,7 @@ const run = async () => {
 			minify: false,
 			format: 'cjs',
 			platform: 'node',
-			outfile: serverjs,
+			outfile: serverOut,
 		})
 
 		const bundlePromise = esbuild.build({
@@ -41,42 +36,42 @@ const run = async () => {
 			outdir: output,
 		})
 
-		const Comp = require(serverjs)
+		const ctx = { location: '/about', file: 'dummy' }
 
-		const { root, helmet } = wrap(<Comp.default />)
-		const content = ReactDOM.renderToString(root)
-		const head = generateHead(helmet?.helmet)
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const Root = require(serverOut).default
+		const Body = plugins.reduce(
+			(prev, plugin) => (plugin.wrap ? plugin.wrap(ctx, prev) : prev),
+			<Root />
+		)
+		const content = ReactDOM.renderToString(Body)
 
 		const template = await loadHtmlTemplate()
+		const { body, head } = plugins.reduce(
+			(acc, plugin) => {
+				const html = plugin.html?.(ctx, template, acc)
+				if (html?.body) acc.body.push(html.body)
+				if (html?.head) acc.head.push(html.head)
+				return acc
+			},
+			{ body: [], head: [] } as { body: string[]; head: string[] }
+		)
+
 		const { metafile } = await bundlePromise
 		const bundle = extractBundle(metafile, output)
 
 		const out = Function(
 			'args',
 			`{ return \`${template}\`}`
-		)({ content, bundle, head })
+		)({ content, bundle, body, head })
+
 		console.log(out)
 	} finally {
 		await fs.promises.rm(temp, { recursive: true, force: true })
 	}
 }
-const wrap = (body: ReactElement) => {
-	const helmet: HelmetContext = {}
-	const root = (
-		<StaticRouter location="/">
-			<HelmetProvider context={helmet}>{body}</HelmetProvider>
-		</StaticRouter>
-	)
-	return { root, helmet }
-}
 
-const generateHead = (helmet?: HelmetServerState): string =>
-	Object.values(helmet || {})
-		.map(e => e.toString())
-		.filter(e => e)
-		.join('\n')
-
-const loadHtmlTemplate = async () => {
+const loadHtmlTemplate = async (): Promise<string> => {
 	//TODO: allow to overwrite template by the user
 	return fs.promises.readFile('./template.html', 'utf-8')
 }

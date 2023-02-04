@@ -1,6 +1,6 @@
 import React from 'react'
-import { Helmet, HelmetProvider } from 'react-helmet-async'
-import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
+import { Link, Route, Routes } from 'react-router-dom'
 
 export default () => (
 	<div>
@@ -12,5 +12,8 @@ export default () => (
 		</Helmet>
 		Hello from static site
 		<Link to="/about">About</Link>
+		<Routes>
+			<Route path="/about" element={<div>About content</div>} />
+		</Routes>
 	</div>
 )
