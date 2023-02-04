@@ -1,5 +1,6 @@
 import React from 'react'
 import { Helmet, HelmetProvider } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 export default () => (
 	<div>
@@ -10,5 +11,6 @@ export default () => (
 			<link rel="stylesheet" href="https://example.com/some-style.css" />
 		</Helmet>
 		Hello from static site
+		<Link to="/about">About</Link>
 	</div>
 )
