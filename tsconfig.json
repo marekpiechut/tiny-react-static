@@ -11,6 +11,7 @@
 		"noEmit": true,
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
+		"noImplicitReturns": true,
 		"sourceMap": true,
 		"strict": true,
 		"target": "ES2020",

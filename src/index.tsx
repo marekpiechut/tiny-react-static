@@ -2,18 +2,18 @@ import esbuild, { Metafile } from 'esbuild'
 import fs from 'fs'
 import path from 'path'
 import ReactDOM from 'react-dom/server'
-import { helmetPlugin } from './plugins/helmet'
-import { reactRouterPlugin } from './plugins/react-router'
+import type { Plugin } from './plugins/plugin'
 import { logger } from './logger'
 
 const log = logger('root')
-
-const plugins = [helmetPlugin(), reactRouterPlugin()]
 
 const run = async (): Promise<void> => {
 	const root = __dirname
 	const temp = await fs.promises.mkdtemp(path.join(root, '.static'))
 	const output = createOutputPath(root)
+	const plugins = await findPlugins(__dirname)
+
+	log.warn('plugins:', plugins.map(p => p.name).join(', '))
 
 	const serverOut = path.join(temp, 'server-content.js')
 	try {
@@ -27,9 +27,39 @@ const run = async (): Promise<void> => {
 		})
 
 		const bundlePromise = esbuild.build({
-			entryPoints: ['../test-project/index.tsx'],
+			// entryPoints: ['../test-project/index.tsx'],
+			stdin: {
+				contents: `
+				import Comp from '../test-project/index.tsx'
+				import ReactDOM from 'react-dom'
+				import React from 'react'
+				${plugins
+					.filter(p => p.webPlugin)
+					.map(
+						p =>
+							`import STATIC__${normalizePluginName(p.name)} from '${
+								p.webPlugin
+							}'`
+					)
+					.join('\n')}
+				
+				ReactDOM.hydrate(${plugins
+					.filter(p => p.webPlugin)
+					.reduce(
+						(acc, plugin) =>
+							`React.createElement(STATIC__${normalizePluginName(
+								plugin.name
+							)}, {}, ${acc})`,
+						'React.createElement(Comp, {}, null)'
+					)}
+					, document.getElementById('react-root'))
+				`,
+				resolveDir: __dirname,
+				loader: 'tsx',
+			},
 			bundle: true,
-			minify: true,
+			minify: false,
+			jsxDev: true,
 			format: 'iife',
 			platform: 'browser',
 			entryNames: '[ext]/[name]-[hash]',
@@ -37,12 +67,13 @@ const run = async (): Promise<void> => {
 			outdir: output,
 		})
 
-		const ctx = { location: '/about', file: 'dummy' }
+		const ctx = { location: '/', file: 'dummy' }
 
 		// eslint-disable-next-line @typescript-eslint/no-var-requires
 		const Root = require(serverOut).default
 		const Body = plugins.reduce(
-			(prev, plugin) => (plugin.wrap ? plugin.wrap(ctx, prev) : prev),
+			(prev, plugin) =>
+				plugin.server?.wrap ? plugin.server.wrap(ctx, prev) : prev,
 			<Root />
 		)
 		const content = ReactDOM.renderToString(Body)
@@ -50,7 +81,7 @@ const run = async (): Promise<void> => {
 		const template = await loadHtmlTemplate()
 		const { body, head } = plugins.reduce(
 			(acc, plugin) => {
-				const html = plugin.html?.(ctx, template, acc)
+				const html = plugin.server?.html?.(ctx, template, acc)
 				if (html?.body) acc.body.push(html.body)
 				if (html?.head) acc.head.push(html.head)
 				return acc
@@ -66,7 +97,7 @@ const run = async (): Promise<void> => {
 			`{ return \`${template}\`}`
 		)({ content, bundle, body, head })
 
-		console.log(out)
+		await fs.promises.writeFile(path.join(output, 'index.html'), out, 'utf-8')
 	} finally {
 		await fs.promises.rm(temp, { recursive: true, force: true })
 	}
@@ -97,5 +128,48 @@ const extractBundle = (metafile: Metafile, outdir: string): string | null => {
 	}
 	return null
 }
+
+type PluginDescriptor = {
+	name: string
+	path: string
+	webPlugin?: string
+	server?: Plugin
+}
+const findPlugins = async (root: string): Promise<PluginDescriptor[]> => {
+	const pluginsFolder = path.join(root, 'plugins')
+	const pluginDirs = await fs.promises.readdir(pluginsFolder, {
+		withFileTypes: true,
+	})
+	const plugins: PluginDescriptor[] = []
+
+	await Promise.all(
+		pluginDirs
+			.filter(f => f.isDirectory())
+			.map(pluginDir => {
+				const pluginPath = path.join(pluginsFolder, pluginDir.name)
+				return fs.promises.readdir(pluginPath).then(files => {
+					const plugin: PluginDescriptor = {
+						name: pluginDir.name,
+						path: pluginPath,
+					}
+					files.forEach(file => {
+						if (file.endsWith('.web.ts') || file.endsWith('.web.tsx')) {
+							plugin.webPlugin = path.join(pluginPath, file)
+						}
+						if (file.endsWith('.server.ts') || file.endsWith('.server.tsx')) {
+							const factory = require(path.join(pluginPath, file))
+							plugin.server = factory.default()
+						}
+					})
+					plugins.push(plugin)
+				})
+			})
+	)
+
+	return plugins
+}
+
+const normalizePluginName = (s: string): string =>
+	s.replace(/[^a-zA-Z0-9]/g, '_')
 
 run()

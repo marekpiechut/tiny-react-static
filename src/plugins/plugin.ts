@@ -1,5 +1,6 @@
-import { ReactElement } from 'react'
+import React, { ReactElement, ReactNode } from 'react'
 export type Context = {
+	basename?: string
 	location: string
 	file: string
 }
@@ -18,3 +19,9 @@ export type Plugin = {
 	}
 	wrap?: (ctx: Context, body: ReactElement) => ReactElement
 }
+
+type WebPluginProps<Config> = {
+	children: ReactNode | ReactNode[]
+	config?: Config
+}
+export type WebPlugin<Config> = React.ComponentType<WebPluginProps<Config>>

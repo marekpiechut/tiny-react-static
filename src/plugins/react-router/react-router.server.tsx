@@ -1,5 +1,5 @@
 import { StaticRouter } from 'react-router-dom/server'
-import { Plugin } from './plugin'
+import { Plugin } from '../plugin'
 
 export const reactRouterPlugin = (): Plugin => {
 	return {

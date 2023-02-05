@@ -1,5 +1,5 @@
 import { HelmetProvider, HelmetServerState } from 'react-helmet-async'
-import { Plugin } from './plugin'
+import { Plugin } from '../plugin'
 
 type HelmetContext = {
 	helmet?: HelmetServerState
