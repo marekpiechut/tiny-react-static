@@ -2,8 +2,8 @@ import esbuild, { Metafile } from 'esbuild'
 import fs from 'fs'
 import path from 'path'
 import ReactDOM from 'react-dom/server'
-import type { Plugin } from './plugins/plugin'
 import { logger } from './logger'
+import { loadPlugins } from './plugin-repository'
 
 const log = logger('root')
 
@@ -11,9 +11,9 @@ const run = async (): Promise<void> => {
 	const root = __dirname
 	const temp = await fs.promises.mkdtemp(path.join(root, '.static'))
 	const output = createOutputPath(root)
-	const plugins = await findPlugins(__dirname)
+	const plugins = await loadPlugins(__dirname)
 
-	log.warn('plugins:', plugins.map(p => p.name).join(', '))
+	log.info('plugins:', plugins.map(p => p.name).join(', '))
 
 	const serverOut = path.join(temp, 'server-content.js')
 	try {
@@ -35,21 +35,14 @@ const run = async (): Promise<void> => {
 				import React from 'react'
 				${plugins
 					.filter(p => p.webPlugin)
-					.map(
-						p =>
-							`import STATIC__${normalizePluginName(p.name)} from '${
-								p.webPlugin
-							}'`
-					)
+					.map(p => `import STATIC__${p.normalizedName} from '${p.webPlugin}'`)
 					.join('\n')}
-				
+
 				ReactDOM.hydrate(${plugins
 					.filter(p => p.webPlugin)
 					.reduce(
 						(acc, plugin) =>
-							`React.createElement(STATIC__${normalizePluginName(
-								plugin.name
-							)}, {}, ${acc})`,
+							`React.createElement(STATIC__${plugin.normalizedName}, {}, ${acc})`,
 						'React.createElement(Comp, {}, null)'
 					)}
 					, document.getElementById('react-root'))
@@ -128,48 +121,5 @@ const extractBundle = (metafile: Metafile, outdir: string): string | null => {
 	}
 	return null
 }
-
-type PluginDescriptor = {
-	name: string
-	path: string
-	webPlugin?: string
-	server?: Plugin
-}
-const findPlugins = async (root: string): Promise<PluginDescriptor[]> => {
-	const pluginsFolder = path.join(root, 'plugins')
-	const pluginDirs = await fs.promises.readdir(pluginsFolder, {
-		withFileTypes: true,
-	})
-	const plugins: PluginDescriptor[] = []
-
-	await Promise.all(
-		pluginDirs
-			.filter(f => f.isDirectory())
-			.map(pluginDir => {
-				const pluginPath = path.join(pluginsFolder, pluginDir.name)
-				return fs.promises.readdir(pluginPath).then(files => {
-					const plugin: PluginDescriptor = {
-						name: pluginDir.name,
-						path: pluginPath,
-					}
-					files.forEach(file => {
-						if (file.endsWith('.web.ts') || file.endsWith('.web.tsx')) {
-							plugin.webPlugin = path.join(pluginPath, file)
-						}
-						if (file.endsWith('.server.ts') || file.endsWith('.server.tsx')) {
-							const factory = require(path.join(pluginPath, file))
-							plugin.server = factory.default()
-						}
-					})
-					plugins.push(plugin)
-				})
-			})
-	)
-
-	return plugins
-}
-
-const normalizePluginName = (s: string): string =>
-	s.replace(/[^a-zA-Z0-9]/g, '_')
 
 run()

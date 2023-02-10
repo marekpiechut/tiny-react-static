@@ -16,7 +16,7 @@ export const logger = (name: string): Logger => {
 		},
 		info: (...args): void => {
 			if (level <= 10)
-				console.info(chalk.blue('INFO'), chalk.grey(name, '-', ...args))
+				console.info(chalk.blue('INFO'), chalk.white(name, '-', ...args))
 		},
 		warn: (...args): void => {
 			if (level <= 20) console.warn(chalk.yellow('WARN', name, '-', ...args))
